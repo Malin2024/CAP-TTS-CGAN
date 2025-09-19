@@ -5,9 +5,8 @@ import torch.nn as nn
 # Generator
 # ------------------------------
 class Generator(nn.Module):
-    def __init__(self, latent_dim=100, out_channels=22, hidden_channels=128, seq_len=3000):
+    def __init__(self, latent_dim=100, out_channels=22, hidden_channels=128):
         super(Generator, self).__init__()
-        self.seq_len = seq_len
         self.net = nn.Sequential(
             nn.ConvTranspose1d(latent_dim, hidden_channels, kernel_size=25, stride=4, padding=11, output_padding=1),
             nn.BatchNorm1d(hidden_channels),
@@ -23,11 +22,7 @@ class Generator(nn.Module):
 
     def forward(self, z):
         z = z.unsqueeze(2)  # add time dimension
-        out = self.net(z)
-        # optionally crop or pad to seq_len
-        if out.size(2) != self.seq_len:
-            out = nn.functional.interpolate(out, size=self.seq_len)
-        return out
+        return self.net(z)
 
 # ------------------------------
 # Discriminator
