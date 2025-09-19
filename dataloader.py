@@ -40,4 +40,5 @@ class CAPDataset(Dataset):
 
     def __getitem__(self, idx):
         x = self.samples[idx]
-        return torch.tensor(x, dtype=torch.float32)
+        # Return dummy label so training loop works
+        return torch.tensor(x, dtype=torch.float32), 0
