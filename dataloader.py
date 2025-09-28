@@ -1,44 +1,29 @@
-import os
+# dataloader.py (replace existing dataset class)
+
 import numpy as np
 import torch
 from torch.utils.data import Dataset
 
-class CAPDataset(Dataset):
-    def __init__(self, data_dir, window_sec=30, fs=100, cache_npy=None):
-        self.data_dir = data_dir
-        self.window_sec = window_sec
-        self.fs = fs
-        self.cache_npy = cache_npy
-        self.samples = []
+class CAPNPZDataset(Dataset):
+    def __init__(self, npz_path, transform=None):
+        data = np.load(npz_path)
+        X, y = data['X'], data['y']
+        cap_mask = (y > 0)
+        self.X = X[cap_mask].astype(np.float32)
+        self.y = (y[cap_mask] - 1).astype(np.int64)  # shift labels 1→0, 2→1, 3→2
+        self.transform = transform
 
-        self._build_dataset()
-
-    def _build_dataset(self):
-        import pyedflib
-
-        files = [os.path.join(self.data_dir, f) for f in os.listdir(self.data_dir) if f.endswith('.edf')]
-        for fpath in files:
-            with pyedflib.EdfReader(fpath) as f:
-                n_signals = f.signals_in_file
-                # Read all signals
-                sigs = [f.readSignal(i) for i in range(n_signals)]
-                # Crop to shortest channel length
-                min_len = min(len(sig) for sig in sigs)
-                sigs = np.array([sig[:min_len] for sig in sigs])  # shape: (channels, time)
-
-                # --- windowing ---
-                window_size = self.window_sec * self.fs
-                n_windows = min_len // window_size
-                for w in range(n_windows):
-                    start = w * window_size
-                    end = start + window_size
-                    window = sigs[:, start:end]
-                    self.samples.append(window)
+        # scale to [-1,1] for Tanh generator
+        self.X = (self.X - self.X.min()) / (self.X.max() - self.X.min())
+        self.X = 2 * self.X - 1
 
     def __len__(self):
-        return len(self.samples)
+        return len(self.X)
 
     def __getitem__(self, idx):
-        x = self.samples[idx]
-        # Return dummy label so training loop works
-        return torch.tensor(x, dtype=torch.float32), 0
+        x = self.X[idx]  # shape (1,640)
+        y = self.y[idx]
+        x = torch.tensor(x, dtype=torch.float32)
+        y = torch.tensor(y, dtype=torch.long)
+        return x, y
+
