@@ -2,7 +2,7 @@ import argparse
 import os
 import torch
 from torch.utils.data import DataLoader
-from dataloader import CAPDataset
+from dataloader import CAPNPZDataset
 from models import Generator, Discriminator
 from tqdm import tqdm
 
