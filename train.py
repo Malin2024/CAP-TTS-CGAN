@@ -15,8 +15,13 @@ def train(args):
     dl = DataLoader(ds, batch_size=args.batch_size, shuffle=True)
 
     # --- Models ---
-    G = Generator()
-    D = Discriminator()
+    #G = Generator()
+    #D = Discriminator()
+
+    from models import Generator, Discriminator
+    G = Generator(latent_dim=100, signal_len=640, num_classes=3).to(device)
+    D = Discriminator(signal_len=640, num_classes=3).to(device)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     G, D = G.to(device), D.to(device)
 
