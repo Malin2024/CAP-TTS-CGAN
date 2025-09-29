@@ -1,85 +1,89 @@
-import argparse
-import os
+import numpy as np
 import torch
-from torch.utils.data import DataLoader
-from dataloader import CAPNPZDataset
-from models import Generator, Discriminator
-from tqdm import tqdm
 import torch.nn as nn
+import torch.optim as optim
+import matplotlib.pyplot as plt
+from dataloader import CAPNPZDataset
+from models import Generator, Discriminator  # or ConvGenerator if you switched
 
-def train(args):
-    os.makedirs(args.checkpoint_dir, exist_ok=True)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# ---------------------------
+# Load dataset
+# ---------------------------
+npz_path = "/content/drive/MyDrive/CAPSLPDB/CapMiniDb/processed/CAP_windows.npz"
+dataset = CAPNPZDataset(npz_path)
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=64, shuffle=True)
 
-    # Dataset and dataloader
-    ds = CAPNPZDataset(args.data_dir)
-    dl = DataLoader(ds, batch_size=args.batch_size, shuffle=True)
+print(f"✅ Loaded dataset: {len(dataset)} CAP windows")
 
-    # Models with updated embedding_dim if you want (optional)
-    embedding_dim = 50  # match updated model definition
-    G = Generator(latent_dim=100, signal_len=640, num_classes=3, embedding_dim=embedding_dim).to(device)
-    D = Discriminator(signal_len=640, num_classes=3, embedding_dim=embedding_dim).to(device)
+# ---------------------------
+# Initialize models
+# ---------------------------
+latent_dim = 100
+signal_len = 640
+num_classes = 3
 
-    # Loss and optimizers
-    criterion = nn.BCELoss()
-    g_opt = torch.optim.Adam(G.parameters(), lr=args.lr, betas=(0.5, 0.999))
-    d_opt = torch.optim.Adam(D.parameters(), lr=args.lr, betas=(0.5, 0.999))
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    for epoch in range(args.epochs):
-        pbar = tqdm(dl, desc=f"Epoch {epoch+1}/{args.epochs}")
-        for real_x, labels in pbar:
-            real_x = real_x.to(device)
-            labels = labels.to(device)
-            batch_size = real_x.size(0)
+# Choose your Generator here:
+generator = Generator(latent_dim=latent_dim, signal_len=signal_len, num_classes=num_classes).to(device)
+# OR, for conv generator:
+# from models import ConvGenerator
+# generator = ConvGenerator(latent_dim=latent_dim, signal_len=signal_len, num_classes=num_classes).to(device)
 
-            valid = torch.ones(batch_size, 1, device=device)
-            fake = torch.zeros(batch_size, 1, device=device)
+discriminator = Discriminator(signal_len=signal_len, num_classes=num_classes).to(device)
 
-            # Train Discriminator
-            z = torch.randn(batch_size, 100, device=device)
-            gen_labels = torch.randint(0, 3, (batch_size,), device=device)
+criterion = nn.BCELoss()
+optimizer_G = optim.Adam(generator.parameters(), lr=0.0002, betas=(0.5, 0.999))
+optimizer_D = optim.Adam(discriminator.parameters(), lr=0.0002, betas=(0.5, 0.999))
 
-            fake_x = G(z, gen_labels)
+# ---------------------------
+# Training loop
+# ---------------------------
+num_epochs = 50
+D_losses, G_losses = [], []
 
-            real_pred = D(real_x, labels)
-            fake_pred = D(fake_x.detach(), gen_labels)
+for epoch in range(1, num_epochs + 1):
+    for real_data, labels in dataloader:
+        real_data, labels = real_data.to(device), labels.to(device)
+        batch_size = real_data.size(0)
 
-            d_real_loss = criterion(real_pred, valid)
-            d_fake_loss = criterion(fake_pred, fake)
-            d_loss = (d_real_loss + d_fake_loss) / 2
+        valid = torch.ones(batch_size, 1).to(device)
+        fake = torch.zeros(batch_size, 1).to(device)
 
-            d_opt.zero_grad()
-            d_loss.backward()
-            d_opt.step()
+        # --- Train Generator ---
+        optimizer_G.zero_grad()
+        z = torch.randn(batch_size, latent_dim).to(device)
+        gen_labels = torch.randint(0, num_classes, (batch_size,)).to(device)
+        gen_data = generator(z, gen_labels)  # Shape: (batch, 1, signal_len)
+        g_loss = criterion(discriminator(gen_data, gen_labels), valid)
+        g_loss.backward()
+        optimizer_G.step()
 
-            # Train Generator
-            z = torch.randn(batch_size, 100, device=device)
-            gen_labels = torch.randint(0, 3, (batch_size,), device=device)
+        # --- Train Discriminator ---
+        optimizer_D.zero_grad()
+        real_loss = criterion(discriminator(real_data, labels), valid)
+        fake_loss = criterion(discriminator(gen_data.detach(), gen_labels), fake)
+        d_loss = (real_loss + fake_loss) / 2
+        d_loss.backward()
+        optimizer_D.step()
 
-            fake_x = G(z, gen_labels)
-            fake_pred = D(fake_x, gen_labels)
-            g_loss = criterion(fake_pred, valid)
+    D_losses.append(d_loss.item())
+    G_losses.append(g_loss.item())
 
-            g_opt.zero_grad()
-            g_loss.backward()
-            g_opt.step()
+    if epoch % 5 == 0 or epoch == 1:
+        print(f"Epoch [{epoch}/{num_epochs}] | D_loss: {d_loss.item():.4f} | G_loss: {g_loss.item():.4f}")
 
-            pbar.set_postfix({"d_loss": d_loss.item(), "g_loss": g_loss.item()})
+print("✅ TTS-CGAN training complete")
 
-        # Save checkpoints
-        torch.save(G.state_dict(), os.path.join(args.checkpoint_dir, f"generator_epoch{epoch+1}.pth"))
-        torch.save(D.state_dict(), os.path.join(args.checkpoint_dir, f"discriminator_epoch{epoch+1}.pth"))
-        torch.save(G.state_dict(), os.path.join(args.checkpoint_dir, "generator_latest.pth"))
-        torch.save(D.state_dict(), os.path.join(args.checkpoint_dir, "discriminator_latest.pth"))
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data_dir", type=str, required=True, help="Path to dataset npz")
-    parser.add_argument("--epochs", type=int, default=10)
-    parser.add_argument("--batch_size", type=int, default=64)
-    parser.add_argument("--lr", type=float, default=0.0002)
-    parser.add_argument("--checkpoint_dir", type=str, default="checkpoints")
-    args = parser.parse_args()
-
-    train(args)
+# ---------------------------
+# Plot losses
+# ---------------------------
+plt.figure(figsize=(8,5))
+plt.plot(D_losses, label="Discriminator Loss")
+plt.plot(G_losses, label="Generator Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Loss")
+plt.title("TTS-CGAN Training Losses")
+plt.legend()
+plt.grid(True)
+plt.show()
