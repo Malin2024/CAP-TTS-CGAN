@@ -4,7 +4,7 @@ import torch.nn as nn
 # ------------------------------
 # Conv1D Generator
 # ------------------------------
-class ConvGenerator(nn.Module):
+class Generator(nn.Module):
     def __init__(self, latent_dim=100, signal_len=640, num_classes=3):
         super().__init__()
         self.latent_dim = latent_dim
@@ -38,7 +38,7 @@ class ConvGenerator(nn.Module):
 # ------------------------------
 # Conv1D Discriminator
 # ------------------------------
-class ConvDiscriminator(nn.Module):
+class Discriminator(nn.Module):
     def __init__(self, signal_len=640, num_classes=3):
         super().__init__()
         self.signal_len = signal_len
