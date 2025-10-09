@@ -1,6 +1,6 @@
-# CAP-TTS-CGAN (skeleton)
+# CAP-TTS-CGAN 
 
-This repository provides a skeleton for training a Time-series GAN (TTS-CGAN style) on the CAP Sleep Database (CAPSLPDB) to produce synthetic CAP EEG segments.
+This repository provides a Time-series GAN (TTS-CGAN style: https://github.com/imics-lab/tts-cgan) on the CAP Sleep Database (CAPSLPDB) to produce synthetic CAP EEG segments.
 
 ## Quick steps
 1. Install dependencies:
